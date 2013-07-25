@@ -169,9 +169,9 @@ fn tok_to_option(tok: ~str) -> Option<~str> {
 
 fn parse(r: @Reader) -> int {
     let fmt = &combined_log_format;
-    let mut ur = ~BufReader::new(r);
+    let mut r = ~BufReader::new(r);
     let mut count = 0;
-    while !ur.r.eof() {
+    while !r.r.eof() {
         let mut e = LogEntry {
             source: ~"", date: ~"", request: ~"",
             status: -1, size: None,
@@ -179,19 +179,19 @@ fn parse(r: @Reader) -> int {
         };
         for fmt.iter().advance |field| {
             match *field {
-                Unused => { read_tok(ur); }
-                Source => { e.source = read_tok(ur); }
-                Date => { e.date = read_tok(ur); }
-                Request => { e.request = read_tok(ur); }
+                Unused => { read_tok(r); }
+                Source => { e.source = read_tok(r); }
+                Date => { e.date = read_tok(r); }
+                Request => { e.request = read_tok(r); }
                 Status => {
-                    let tok = read_tok(ur);
+                    let tok = read_tok(r);
                     e.status = match int::from_str(tok) {
                         Some(s) => s,
                         None => fail!("bad status: " + tok),
                     };
                 }
                 Size => {
-                    e.size = match read_tok(ur) {
+                    e.size = match read_tok(r) {
                         ~"-" => None,
                         s => match int::from_str(s) {
                             None => fail!("bad size: " + s),
@@ -199,14 +199,14 @@ fn parse(r: @Reader) -> int {
                         }
                     }
                 }
-                Referer => { e.referer = tok_to_option(read_tok(ur)); }
-                UserAgent => { e.user_agent = tok_to_option(read_tok(ur)); }
+                Referer => { e.referer = tok_to_option(read_tok(r)); }
+                UserAgent => { e.user_agent = tok_to_option(read_tok(r)); }
             }
         };
-        assert!(ur.must_read_char() == '\n');
+        assert!(r.must_read_char() == '\n');
         //println(fmt!("%?", e));
         count += 1;
-        ur.prod();
+        r.prod();
     }
     return count;
 }
