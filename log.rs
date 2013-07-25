@@ -51,8 +51,9 @@ impl BufReader {
             return None;
         }
 
+        let c = self.buf[self.ofs] as char;
         self.ofs += 1;
-        return Some(self.buf[self.ofs - 1] as char);
+        return Some(c);
     }
 
     fn must_read_char(&mut self) -> char {
