@@ -8,41 +8,51 @@ use std::str;
 
 use extra::getopts::*;
 
-struct UnGetReader {
-    r:    @Reader,
-    char: Option<char>,
-    ofs:  int,
+/// BufReader wraps a Reader with a buffer, letting you read a char at a time.
+/// (The Reader returned by io::file_reader uses calls libc's getc() for each
+/// call to read_byte(), which is very slow.)
+struct BufReader {
+    r: @Reader,
+    buf: [u8, ..4096],
+    ofs: uint,
+    len: uint,
 }
 
-impl UnGetReader {
-    fn new(r: @Reader) -> UnGetReader {
-        UnGetReader {
-            r: r,
-            char: None,
-            ofs: 0,
+impl BufReader {
+    fn new(r: @Reader) -> BufReader {
+        BufReader {r: r, buf: [0, ..4096], ofs: 0, len: 0}
+    }
+
+    fn fill(&mut self) {
+        if self.ofs < self.len {
+            fail!("must read_char() to the end before filling");
         }
+        self.len = self.r.read(self.buf, 4096);
+        self.ofs = 0;
     }
 
     fn unread_char(&mut self, char: char) {
-        match self.char {
-            Some(_) => fail!("multiple unreads"),
-            None => self.char = Some(char)
+        if self.ofs == 0 {
+            fail!("cannot unread further")
+        }
+        self.ofs -= 1;
+        self.buf[self.ofs] = char as u8;
+        if self.len == 0 {
+            self.len = 1;
         }
     }
 
     fn read_char(&mut self) -> Option<char> {
-        match self.char {
-            Some(_) => self.char.take(),
-            None => {
-                match self.r.read_byte() {
-                    b if b < 0 => None,
-                    b => {
-                        self.ofs += 1;
-                        Some(b as char)
-                    }
-                }
-            }
+        if self.ofs == self.len {
+            self.fill();
         }
+
+        if self.ofs == self.len {
+            return None;
+        }
+
+        self.ofs += 1;
+        return Some(self.buf[self.ofs - 1] as char);
     }
 
     fn must_read_char(&mut self) -> char {
@@ -71,6 +81,7 @@ enum LogField {
     UserAgent
 }
 
+/// The common log format used by Apache logs.
 static combined_log_format: [LogField, ..9] = [
     Source, Unused, Unused,
     Date, Request, Status, Size,
@@ -87,7 +98,7 @@ struct LogEntry {
     user_agent: ~str,
 }
 
-fn read_quoted(r: &mut UnGetReader) -> ~str {
+fn read_quoted(r: &mut BufReader) -> ~str {
     let mut str = str::with_capacity(64);
     loop {
         match r.must_read_char() {
@@ -99,7 +110,7 @@ fn read_quoted(r: &mut UnGetReader) -> ~str {
     }
 }
 
-fn read_braced(r: &mut UnGetReader) -> ~str {
+fn read_braced(r: &mut BufReader) -> ~str {
     let mut str = str::with_capacity(64);
     loop {
         match r.must_read_char() {
@@ -109,7 +120,7 @@ fn read_braced(r: &mut UnGetReader) -> ~str {
     }
 }
 
-fn read_plain(r: &mut UnGetReader) -> ~str {
+fn read_plain(r: &mut BufReader) -> ~str {
     let mut str = str::with_capacity(64);
     loop {
         let c = r.must_read_char();
@@ -123,7 +134,7 @@ fn read_plain(r: &mut UnGetReader) -> ~str {
     }
 }
 
-fn read_tok(r: &mut UnGetReader) -> ~str {
+fn read_tok(r: &mut BufReader) -> ~str {
     let tok = match r.read_char() {
         None => fail!("eof at offset " + r.ofs.to_str()),
         Some(c) => {
@@ -138,6 +149,8 @@ fn read_tok(r: &mut UnGetReader) -> ~str {
             }
         }
     };
+
+    // Swallow the following space, if any.
     match r.must_read_char() {
         ' ' => {},
         c => r.unread_char(c)
@@ -152,9 +165,10 @@ fn tok_to_option(tok: ~str) -> Option<~str> {
     }
 }
 
-fn parse(r: @Reader) {
+fn parse(r: @Reader) -> int {
     let fmt = &combined_log_format;
-    let mut ur = ~UnGetReader::new(r);
+    let mut ur = ~BufReader::new(r);
+    let mut count = 0;
     while !ur.r.eof() {
         let mut e = LogEntry {
             source: ~"", date: ~"", request: ~"",
@@ -189,8 +203,10 @@ fn parse(r: @Reader) {
         };
         assert!(ur.must_read_char() == '\n');
         //println(fmt!("%?", e));
+        count += 1;
         ur.prod();
     }
+    return count;
 }
 
 fn main() {
@@ -201,9 +217,11 @@ fn main() {
         [path] => path,
         _ => fail!("path missing")
     };
-        
+
     match io::file_reader(~path::Path(path)) {
-        Ok(r) => parse(r),
+        Ok(r) => {
+            println(fmt!("read %d entries", parse(r)));
+        }
         Err(msg) => println(msg)
     }
 }
