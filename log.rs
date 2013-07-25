@@ -57,6 +57,7 @@ impl BufReader {
     }
 
     fn must_read_char(&mut self) -> char {
+        // XXX 10% slower: self.read_char().expect("eof")
         match self.read_char() {
             None => fail!("eof"),
             Some(c) => c
@@ -193,7 +194,7 @@ fn parse(r: @Reader) -> int {
                     e.size = match read_tok(ur) {
                         ~"-" => None,
                         s => match int::from_str(s) {
-                            None => fail!("bad size"),
+                            None => fail!("bad size: " + s),
                             s => s,
                         }
                     }
