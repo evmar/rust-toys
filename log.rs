@@ -95,8 +95,8 @@ struct LogEntry {
     request: ~str,
     status: int,
     size: Option<int>,
-    referer: ~str,
-    user_agent: ~str,
+    referer: Option<~str>,
+    user_agent: Option<~str>,
 }
 
 fn read_quoted(r: &mut BufReader) -> ~str {
@@ -174,7 +174,7 @@ fn parse(r: @Reader) -> int {
         let mut e = LogEntry {
             source: ~"", date: ~"", request: ~"",
             status: -1, size: None,
-            referer: ~"", user_agent: ~""
+            referer: None, user_agent: None
         };
         for fmt.iter().advance |field| {
             match *field {
@@ -198,8 +198,8 @@ fn parse(r: @Reader) -> int {
                         }
                     }
                 }
-                Referer => { e.referer = read_tok(ur); }
-                UserAgent => { e.user_agent = read_tok(ur); }
+                Referer => { e.referer = tok_to_option(read_tok(ur)); }
+                UserAgent => { e.user_agent = tok_to_option(read_tok(ur)); }
             }
         };
         assert!(ur.must_read_char() == '\n');
